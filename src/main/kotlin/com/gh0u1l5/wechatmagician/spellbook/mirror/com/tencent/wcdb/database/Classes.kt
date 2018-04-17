@@ -9,6 +9,9 @@ object Classes {
     val SQLiteDatabase: Class<*> by wxLazy("SQLiteDatabase") {
         findClassIfExists("$WECHAT_PACKAGE_SQLITE.database.SQLiteDatabase", wxLoader!!)
     }
+    val SQLiteCipherSpec: Class<*> by wxLazy("SQLiteCipherSpec") {
+        findClassIfExists("$WECHAT_PACKAGE_SQLITE.database.SQLiteCipherSpec", wxLoader!!)
+    }
     val SQLiteCursorFactory: Class<*> by wxLazy("SQLiteCursorFactory") {
         findClassIfExists("$WECHAT_PACKAGE_SQLITE.database.SQLiteDatabase\$CursorFactory", wxLoader!!)
     }
