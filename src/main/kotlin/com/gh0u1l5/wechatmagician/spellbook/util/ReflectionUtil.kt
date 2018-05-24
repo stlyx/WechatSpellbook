@@ -12,32 +12,43 @@ import java.util.concurrent.ConcurrentHashMap
  * ReflectionUtil contains the helper functions for APK analysis.
  */
 object ReflectionUtil {
-
-    class ClassName(classType: String) { /* classType example: Ljava/lang/String; */
-        val sections = classType.substring(1, classType.length - 1).split('/')
-        val size = sections.size
-        val className = sections.joinToString(".")
-    }
+    val TAG: String = javaClass.simpleName
 
     class Classes(private val classes: List<Class<*>>) {
         fun filterBySuper(superClass: Class<*>?): Classes {
-            return Classes(classes.filter { it.superclass == superClass })
+            return Classes(classes.filter { it.superclass == superClass }.also {
+                if (it.isEmpty()) {
+                    Log.w(TAG, "filterBySuper found nothing, super class = ${superClass?.simpleName}")
+                }
+            })
         }
 
         fun filterByEnclosingClass(enclosingClass: Class<*>?): Classes {
-            return Classes(classes.filter { it.enclosingClass == enclosingClass })
+            return Classes(classes.filter { it.enclosingClass == enclosingClass }.also {
+                if (it.isEmpty()) {
+                    Log.w(TAG, "filterByEnclosingClass found nothing, enclosing class = ${enclosingClass?.simpleName} ")
+                }
+            })
         }
 
         fun filterByMethod(returnType: Class<*>?, methodName: String, vararg parameterTypes: Class<*>): Classes {
             return Classes(classes.filter { clazz ->
                 val method = findMethodExactIfExists(clazz, methodName, *parameterTypes)
                 method != null && method.returnType == returnType ?: method.returnType
+            }.also {
+                if (it.isEmpty()) {
+                    Log.w(TAG, "filterByMethod found nothing, returnType = ${returnType?.simpleName}, methodName = $methodName, parameterTypes = ${parameterTypes.joinToString("|") { it.simpleName }}")
+                }
             })
         }
 
         fun filterByMethod(returnType: Class<*>?, vararg parameterTypes: Class<*>): Classes {
             return Classes(classes.filter { clazz ->
                 findMethodsByExactParameters(clazz, returnType, *parameterTypes).isNotEmpty()
+            }.also {
+                if (it.isEmpty()) {
+                    Log.w(TAG, "filterByMethod found nothing, returnType = ${returnType?.simpleName}, parameterTypes = ${parameterTypes.joinToString("|") { it.simpleName }}")
+                }
             })
         }
 
@@ -45,12 +56,20 @@ object ReflectionUtil {
             return Classes(classes.filter { clazz ->
                 val field = findFieldIfExists(clazz, fieldName)
                 field != null && field.type.canonicalName == fieldType
+            }.also {
+                if (it.isEmpty()) {
+                    Log.w(TAG, "filterByField found nothing, fieldName = $fieldName, fieldType = $fieldType")
+                }
             })
         }
 
         fun filterByField(fieldType: String): Classes {
             return Classes(classes.filter { clazz ->
                 findFieldsWithType(clazz, fieldType).isNotEmpty()
+            }.also {
+                if (it.isEmpty()) {
+                    Log.w(TAG, "filterByField found nothing, fieldType = $fieldType")
+                }
             })
         }
 
@@ -102,30 +121,31 @@ object ReflectionUtil {
     }
 
     // findClassesFromPackage returns a list of all the classes contained in the given package.
-    @JvmStatic fun findClassesFromPackage(loader: ClassLoader, classes: List<ClassName>, packageName: String, depth: Int = 0): Classes {
+    @JvmStatic fun findClassesFromPackage(loader: ClassLoader, classes: List<String>, packageName: String, depth: Int = 0): Classes {
         if ((packageName to depth) in classCache) {
             return classCache[packageName to depth]!!
         }
 
-        val sections = packageName.split(".")
+        val packageLength = packageName.count { it == '.' } + 1
+        val packageDescriptor = "L${packageName.replace('.', '/')}"
         val result = Classes(classes.filter { clazz ->
-            val currentSections = clazz.sections.dropLast(1)
-            // Check depth
-            if (currentSections.size < sections.size) {
+            val currentPackageLength = clazz.count { it == '/' }
+            if (currentPackageLength < packageLength) {
                 return@filter false
             }
-            val currentDepth = currentSections.size - sections.size
+            // Check depth
+            val currentDepth = currentPackageLength - packageLength
             if (depth != -1 && depth != currentDepth) {
                 return@filter false
             }
             // Check prefix
-            for (i in sections.indices) {
-                if (currentSections[i] != sections[i]) {
-                    return@filter false
-                }
+            if (!clazz.startsWith(packageDescriptor)) {
+                return@filter false
             }
             return@filter true
-        }.mapNotNull { findClassIfExists(it.className, loader) })
+        }.mapNotNull {
+            findClassIfExists(it.substring(1, it.length - 1).replace('/', '.'), loader)
+        })
 
         classCache[packageName to depth] = result
         return result
