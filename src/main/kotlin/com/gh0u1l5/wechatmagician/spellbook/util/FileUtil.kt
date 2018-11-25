@@ -11,33 +11,32 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * FileUtil contains the helper functions for file I/O.
+ * 封装了一批关于磁盘 I/O 的方法
  */
 object FileUtil {
     /**
-     * writeBytesToDisk creates a file and writes the given data into it.
+     * 将一段数据写入磁盘指定位置
+     *
+     * 若文件及其所在目录不存在的话, 会尝试建立该文件和目录
      */
-    fun writeBytesToDisk(path: String, content: ByteArray) {
-        val file = File(path)
-        file.parentFile.mkdirs()
-        FileOutputStream(file).use {
-            it.write(content)
-        }
+    @JvmStatic fun writeBytesToDisk(path: String, content: ByteArray) {
+        val file = File(path).also { it.parentFile.mkdirs() }
+        val fout = FileOutputStream(file)
+        BufferedOutputStream(fout).use { it.write(content) }
     }
 
     /**
-     * readBytesFromDisk returns all the bytes of a binary file.
+     * 从磁盘上读取一个文件的全部数据
      */
-    fun readBytesFromDisk(path: String): ByteArray {
-        return FileInputStream(path).use {
-            it.readBytes()
-        }
+    @JvmStatic fun readBytesFromDisk(path: String): ByteArray {
+        val fin = FileInputStream(path)
+        return BufferedInputStream(fin).use { it.readBytes() }
     }
 
     /**
-     * writeObjectToDisk writes a [Serializable] object onto the disk.
+     * 将一个 [Serializable] 对象写入磁盘指定位置
      */
-    fun writeObjectToDisk(path: String, obj: Serializable) {
+    @JvmStatic fun writeObjectToDisk(path: String, obj: Serializable) {
         val out = ByteArrayOutputStream()
         ObjectOutputStream(out).use {
             it.writeObject(obj)
@@ -46,9 +45,9 @@ object FileUtil {
     }
 
     /**
-     * readObjectFromDisk reads a [Serializable] object from the disk.
+     * 从磁盘上读取一个 [Serializable] 对象
      */
-    fun readObjectFromDisk(path: String): Any? {
+    @JvmStatic fun readObjectFromDisk(path: String): Any? {
         val bytes = readBytesFromDisk(path)
         val ins = ByteArrayInputStream(bytes)
         return ObjectInputStream(ins).use {
@@ -57,39 +56,43 @@ object FileUtil {
     }
 
     /**
-     * writeInputStreamToDisk forward the data from a [InputStream] to a file, this is extremely
-     * helpful when the device has a low memory.
+     * 将一个 [InputStream] 的内容写入磁盘指定位置
      *
-     * @param path the path of the destination
-     * @param `in` the [InputStream] that provides the data
-     * @param bufferSize default buffer size, one may set a larger number for better performance.
+     * 该函数会同步进行读写, 比较节约内存, 在内存空间不足的设备上非常有帮助
+     *
+     * @param path 数据保存路径
+     * @param ins 提供数据的 [InputStream] 对象
+     * @param bufferSize 缓冲区大小, 默认值为8192, 设置更大的值可以换来线性的性能提升
      */
-    fun writeInputStreamToDisk(path: String, `in`: InputStream, bufferSize: Int = 8192) {
+    @JvmStatic fun writeInputStreamToDisk(path: String, ins: InputStream, bufferSize: Int = 8192) {
         val file = File(path)
         file.parentFile.mkdirs()
-        FileOutputStream(file).use {
+        val fout = FileOutputStream(file)
+        BufferedOutputStream(fout).use {
             val buffer = ByteArray(bufferSize)
-            var length = `in`.read(buffer)
+            var length = ins.read(buffer)
             while (length != -1) {
                 it.write(buffer, 0, length)
-                length = `in`.read(buffer)
+                length = ins.read(buffer)
             }
         }
     }
 
     /**
-     * writeBitmapToDisk saves a given [Bitmap] object to disk.
+     * 将一张 [Bitmap] 写入磁盘指定位置
      */
-    fun writeBitmapToDisk(path: String, bitmap: Bitmap) {
+    @JvmStatic fun writeBitmapToDisk(path: String, bitmap: Bitmap) {
         val out = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
         writeBytesToDisk(path, out.toByteArray())
     }
 
     /**
-     * writeOnce ensures that the write callback will only be executed once after start up.
+     * 如果指定文件开机后还没被修改过, 那么执行一次写操作
+     *
+     * @param writeCallback 实际进行写操作的回调函数
      */
-    fun writeOnce(path: String, writeCallback: (String) -> Unit) {
+    @JvmStatic inline fun writeOnce(path: String, writeCallback: (String) -> Unit) {
         val file = File(path)
         if (!file.exists()) {
             writeCallback(path)
@@ -103,15 +106,17 @@ object FileUtil {
     }
 
     /**
-     * createTimeTag returns the current time in a simple format as a time tag.
+     * 基于当前时间创建一个时间戳
      */
-    private val formatter = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.getDefault())
-    fun createTimeTag(): String = formatter.format(Calendar.getInstance().time)
+    @JvmStatic fun createTimeTag(): String {
+        val formatter = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.getDefault())
+        return formatter.format(Calendar.getInstance().time)
+    }
 
     /**
-     * notifyNewMediaFile notifies all the apps that there is a new media file to scan.
+     * 广播告知所有应用: 磁盘上添加了新的图片
      */
-    fun notifyNewMediaFile(path: String, context: Context?) {
+    @JvmStatic fun notifyNewMediaFile(path: String, context: Context?) {
         val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
         context?.sendBroadcast(intent.apply {
             data = Uri.fromFile(File(path))
